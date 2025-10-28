@@ -1,0 +1,805 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Resistance Challenge – Canvas MVP</title>
+    <style>
+        *, *::before, *::after {
+            box-sizing: border-box;
+        }
+
+        :root {
+            color-scheme: dark light;
+            font-family: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+            --bg-gradient: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
+            --panel-gradient: linear-gradient(135deg, rgba(59, 130, 246, 0.6), rgba(14, 165, 233, 0.6));
+            --panel-border: rgba(148, 163, 184, 0.2);
+            --text-bright: #f8fafc;
+            --text-soft: rgba(226, 232, 240, 0.8);
+            --accent: #facc15;
+            --danger: #fb7185;
+        }
+
+        body {
+            margin: 0;
+            min-height: 100vh;
+            background: var(--bg-gradient);
+            color: var(--text-bright);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 24px;
+        }
+
+        main {
+            width: min(960px, 100%);
+            display: grid;
+            gap: 24px;
+        }
+
+        header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 16px;
+            background: rgba(15, 23, 42, 0.65);
+            border: 1px solid var(--panel-border);
+            padding: 24px;
+            border-radius: 24px;
+            backdrop-filter: blur(16px);
+        }
+
+        h1 {
+            font-size: clamp(1.8rem, 3vw, 2.4rem);
+            margin: 0;
+        }
+
+        .streak {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 12px 16px;
+            border-radius: 999px;
+            background: rgba(250, 204, 21, 0.12);
+            border: 1px solid rgba(250, 204, 21, 0.4);
+            font-weight: 600;
+            letter-spacing: 0.5px;
+        }
+
+        .canvas-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 24px;
+        }
+
+        .canvas-frame {
+            position: relative;
+            height: 360px;
+            border-radius: 24px;
+            overflow: hidden;
+            background: rgba(15, 23, 42, 0.8);
+            border: 1px solid rgba(148, 163, 184, 0.25);
+            box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.02);
+        }
+
+        #conceptCanvas {
+            width: 100%;
+            height: 100%;
+            display: block;
+        }
+
+        .panel {
+            position: relative;
+            border-radius: 24px;
+            padding: 24px;
+            background: rgba(15, 23, 42, 0.75);
+            border: 1px solid var(--panel-border);
+            box-shadow: 0 20px 45px rgba(15, 23, 42, 0.35);
+            overflow: hidden;
+        }
+
+        .panel::before {
+            content: "";
+            position: absolute;
+            inset: 1px;
+            border-radius: 23px;
+            padding: 1px;
+            background: var(--panel-gradient);
+            mask: linear-gradient(#000, #000) content-box, linear-gradient(#000, #000);
+            mask-composite: exclude;
+        }
+
+        .slot-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+            gap: 16px;
+            margin-top: 12px;
+        }
+
+        .slot-card {
+            position: relative;
+            padding: 16px;
+            border-radius: 20px;
+            background: rgba(30, 41, 59, 0.85);
+            border: 1px solid rgba(148, 163, 184, 0.25);
+            min-height: 120px;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            gap: 8px;
+            transition: transform 0.45s ease, border-color 0.45s ease;
+        }
+
+        .slot-card.spinning {
+            transform: rotateX(12deg) scale(0.98);
+            border-color: rgba(59, 130, 246, 0.65);
+        }
+
+        .slot-label {
+            font-size: 0.75rem;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            color: var(--text-soft);
+        }
+
+        .slot-value {
+            font-size: 1.35rem;
+            font-weight: 700;
+            min-height: 1.7em;
+        }
+
+        .slot-value.crossed-out {
+            color: rgba(226, 232, 240, 0.45);
+            position: relative;
+        }
+
+        .slot-value.crossed-out::after {
+            content: "";
+            position: absolute;
+            left: 0;
+            right: 0;
+            top: 50%;
+            height: 3px;
+            background: linear-gradient(90deg, rgba(251, 113, 133, 0), rgba(251, 113, 133, 0.8), rgba(251, 113, 133, 0));
+            transform: translateY(-50%);
+            animation: strike 600ms ease forwards;
+        }
+
+        @keyframes strike {
+            from {
+                transform: translateY(-50%) scaleX(0);
+            }
+            to {
+                transform: translateY(-50%) scaleX(1);
+            }
+        }
+
+        .controls {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 12px;
+            margin-top: 16px;
+        }
+
+        button {
+            font: inherit;
+            border: none;
+            border-radius: 999px;
+            padding: 14px 22px;
+            font-weight: 600;
+            cursor: pointer;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            transition: transform 150ms ease, box-shadow 150ms ease, background 150ms ease;
+        }
+
+        button:focus-visible {
+            outline: 3px solid rgba(59, 130, 246, 0.7);
+            outline-offset: 3px;
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, #3b82f6, #2563eb);
+            color: #0f172a;
+            box-shadow: 0 10px 30px rgba(37, 99, 235, 0.4);
+        }
+
+        .btn-primary:hover:not(:disabled) {
+            transform: translateY(-2px);
+        }
+
+        .btn-secondary {
+            background: rgba(148, 163, 184, 0.15);
+            color: var(--text-bright);
+        }
+
+        .btn-ghost {
+            background: transparent;
+            color: var(--text-soft);
+        }
+
+        .btn-small {
+            padding: 10px 16px;
+        }
+
+        button:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
+
+        .result {
+            margin-top: 12px;
+            font-size: 1.1rem;
+            line-height: 1.4;
+        }
+
+        .chip-row {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+        }
+
+        .chip {
+            background: rgba(59, 130, 246, 0.18);
+            border-radius: 999px;
+            padding: 8px 14px;
+            font-size: 0.85rem;
+            letter-spacing: 0.3px;
+        }
+
+        .timer {
+            display: grid;
+            gap: 16px;
+            justify-items: center;
+            text-align: center;
+        }
+
+        .timer-display {
+            font-variant-numeric: tabular-nums;
+            font-size: 2.6rem;
+            font-weight: 700;
+            color: var(--accent);
+        }
+
+        .timer-display.finished {
+            color: var(--danger);
+        }
+
+        .canvas-notes {
+            display: grid;
+            gap: 8px;
+        }
+
+        .note-label {
+            text-transform: uppercase;
+            font-size: 0.75rem;
+            letter-spacing: 0.7px;
+            color: var(--text-soft);
+        }
+
+        .note-value {
+            font-size: 1rem;
+            line-height: 1.5;
+        }
+
+        @media (max-width: 720px) {
+            body {
+                padding: 16px;
+            }
+
+            .canvas-frame {
+                height: 300px;
+            }
+
+            header {
+                flex-direction: column;
+                align-items: stretch;
+                text-align: center;
+            }
+
+            .streak {
+                align-self: center;
+            }
+        }
+    </style>
+</head>
+<body>
+    <main>
+        <header>
+            <h1>Resistance Challenge – MVP Canvas</h1>
+            <div class="streak" aria-live="polite">
+                <span role="img" aria-hidden="true">🔥</span>
+                <span>Streak <strong id="streakValue">0</strong></span>
+            </div>
+        </header>
+
+        <section class="panel" aria-labelledby="visualCanvasTitle">
+            <h2 id="visualCanvasTitle">Visual Canvas</h2>
+            <p class="note-value">Schnappschuss der Nutzerreise – vom Spin über den Timer bis zur Streak.</p>
+            <div class="canvas-frame">
+                <canvas
+                    id="conceptCanvas"
+                    role="img"
+                    aria-label="Visuelle Canvas-Übersicht der Resistance Challenge MVP"
+                ></canvas>
+            </div>
+        </section>
+
+        <section class="panel" aria-labelledby="slotMachineTitle">
+            <h2 id="slotMachineTitle">Canvas Slot Machine</h2>
+            <p class="note-value">Tippe auf „Spin“, um dir in Sekunden eine zufällige Resistance-Challenge zusammenzustellen.</p>
+
+            <div class="slot-grid" role="list">
+                <article class="slot-card" data-slot="exercise" role="listitem" aria-live="polite">
+                    <span class="slot-label">Übung</span>
+                    <span class="slot-value" id="exerciseValue">Bereit?</span>
+                </article>
+                <article class="slot-card" data-slot="duration" role="listitem" aria-live="polite">
+                    <span class="slot-label">Dauer</span>
+                    <span class="slot-value" id="timeValue">00s</span>
+                </article>
+                <article class="slot-card" data-slot="modifier" role="listitem" aria-live="polite">
+                    <span class="slot-label">Modifikator</span>
+                    <span class="slot-value" id="modifierValue">–</span>
+                </article>
+            </div>
+
+            <div class="controls">
+                <button id="spinButton" class="btn-primary">
+                    🎰 Spin
+                </button>
+                <button id="rerollButton" class="btn-secondary" disabled>
+                    🎲 Reroll
+                </button>
+                <button id="copyButton" class="btn-ghost" disabled>
+                    📋 Kopieren
+                </button>
+            </div>
+
+            <p class="result" id="resultText" aria-live="polite"></p>
+
+            <div class="chip-row" id="equipmentRow" aria-label="Equipment Filters"></div>
+        </section>
+
+        <section class="panel" aria-labelledby="timerTitle">
+            <h2 id="timerTitle">Timer & Flow</h2>
+            <div class="timer">
+                <span class="timer-display" id="timerDisplay">0:00</span>
+                <div class="controls">
+                    <button id="toggleTimer" class="btn-secondary btn-small" disabled>▶️ Start</button>
+                    <button id="resetTimer" class="btn-ghost btn-small" disabled>🔄 Reset</button>
+                    <button id="completeChallenge" class="btn-primary btn-small" disabled>✅ Done</button>
+                </div>
+            </div>
+        </section>
+
+        <section class="panel" aria-labelledby="canvasNotes">
+            <h2 id="canvasNotes">Canvas Snapshot</h2>
+            <div class="canvas-notes">
+                <div>
+                    <span class="note-label">Hypothese</span>
+                    <p class="note-value">Schnelle, spielerische Workouts senken Einstiegshürden und erhöhen die Konsistenz im Resistance Training.</p>
+                </div>
+                <div>
+                    <span class="note-label">Key Metric</span>
+                    <p class="note-value">Anzahl abgeschlossener Spins pro Nutzer:in pro Woche.</p>
+                </div>
+                <div>
+                    <span class="note-label">Next Up</span>
+                    <p class="note-value">Feedback-Loop integrieren: Schwierigkeit bewerten und passende Progressionen vorschlagen.</p>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <template id="chipTemplate">
+        <span class="chip"></span>
+    </template>
+
+    <script>
+        const exercises = [
+            { name: "Squats", equipment: ["Bodyweight"], evolution: "Jump Squats" },
+            { name: "Push-ups", equipment: ["Bodyweight"], evolution: "Push-up Clap" },
+            { name: "Reverse Lunges", equipment: ["Bodyweight", "Bands"], evolution: "Front Kick Lunge" },
+            { name: "Mountain Climbers", equipment: ["Bodyweight"], evolution: "Cross-body Climbers" },
+            { name: "Hollow Hold", equipment: ["Bodyweight"], evolution: "V-Ups" },
+            { name: "Jumping Jacks", equipment: ["Bodyweight"], evolution: "Burpee Pop" },
+            { name: "Plank", equipment: ["Bodyweight"], evolution: "Plank Walkouts" },
+            { name: "Band Row", equipment: ["Bands"], evolution: "Iso Hold Row" }
+        ];
+
+        const durations = ["20s", "30s", "40s", "50s", "60s"];
+        const globalModifiers = [
+            { label: "AMRAP", description: "So viele Wiederholungen wie möglich" },
+            { label: "Tempo 3-1-3", description: "3s exzentrisch, 1s halten, 3s konzentrisch" },
+            { label: "+ Loop Band", description: "Loop Band hinzufügen" },
+            { label: "Time ×2", description: "Dauer verdoppeln" }
+        ];
+
+        const exerciseValue = document.getElementById("exerciseValue");
+        const timeValue = document.getElementById("timeValue");
+        const modifierValue = document.getElementById("modifierValue");
+        const resultText = document.getElementById("resultText");
+        const timerDisplay = document.getElementById("timerDisplay");
+        const spinButton = document.getElementById("spinButton");
+        const rerollButton = document.getElementById("rerollButton");
+        const copyButton = document.getElementById("copyButton");
+        const toggleTimer = document.getElementById("toggleTimer");
+        const resetTimer = document.getElementById("resetTimer");
+        const completeChallenge = document.getElementById("completeChallenge");
+        const streakValue = document.getElementById("streakValue");
+        const equipmentRow = document.getElementById("equipmentRow");
+        const chipTemplate = document.getElementById("chipTemplate");
+        const conceptCanvas = document.getElementById("conceptCanvas");
+        const conceptCtx = conceptCanvas?.getContext?.("2d") ?? null;
+
+        const slotCards = Array.from(document.querySelectorAll(".slot-card"));
+
+        let currentExercise = null;
+        let currentDuration = null;
+        let currentModifier = null;
+        let timerSeconds = 0;
+        let timerInterval = null;
+        let isSpinning = false;
+        let canvasSummary = "Tippe auf \u201eSpin\u201c, um zu starten.";
+        let canvasEquipment = [];
+        let canvasPhase = "Bereit";
+        let canvasTimerText = "0:00";
+        let canvasStreakSnapshot = 0;
+        let streak = Number(localStorage.getItem("rc-streak") || 0);
+        streakValue.textContent = streak;
+        canvasStreakSnapshot = streak;
+
+        function randomItem(list) {
+            return list[Math.floor(Math.random() * list.length)];
+        }
+
+        function setCanvasState(updates = {}) {
+            if (Object.prototype.hasOwnProperty.call(updates, "summary")) {
+                canvasSummary = updates.summary;
+            }
+            if (Object.prototype.hasOwnProperty.call(updates, "equipment")) {
+                canvasEquipment = updates.equipment || [];
+            }
+            if (Object.prototype.hasOwnProperty.call(updates, "phase")) {
+                canvasPhase = updates.phase;
+            }
+            if (Object.prototype.hasOwnProperty.call(updates, "timer")) {
+                canvasTimerText = updates.timer;
+            }
+            if (Object.prototype.hasOwnProperty.call(updates, "streak")) {
+                canvasStreakSnapshot = updates.streak;
+            }
+
+            if (conceptCtx) {
+                requestAnimationFrame(refreshCanvas);
+            }
+        }
+
+        function refreshCanvas() {
+            if (!conceptCanvas || !conceptCtx) return;
+
+            const ratio = window.devicePixelRatio || 1;
+            const rect = conceptCanvas.getBoundingClientRect();
+
+            if (!rect.width || !rect.height) {
+                return;
+            }
+
+            conceptCanvas.width = rect.width * ratio;
+            conceptCanvas.height = rect.height * ratio;
+            conceptCtx.setTransform(1, 0, 0, 1, 0, 0);
+            conceptCtx.scale(ratio, ratio);
+
+            drawCanvasScene(conceptCtx, rect.width, rect.height);
+        }
+
+        function drawCanvasScene(ctx, width, height) {
+            ctx.clearRect(0, 0, width, height);
+
+            const bgGradient = ctx.createLinearGradient(0, 0, width, height);
+            bgGradient.addColorStop(0, "rgba(37, 99, 235, 0.25)");
+            bgGradient.addColorStop(1, "rgba(14, 165, 233, 0.4)");
+            ctx.fillStyle = bgGradient;
+            ctx.fillRect(0, 0, width, height);
+
+            const boardX = 24;
+            const boardY = 24;
+            const boardWidth = width - boardX * 2;
+            const boardHeight = height - boardY * 2;
+
+            drawRoundedRect(ctx, boardX, boardY, boardWidth, boardHeight, 28, "rgba(15, 23, 42, 0.82)");
+
+            ctx.save();
+            ctx.shadowColor = "rgba(14, 165, 233, 0.35)";
+            ctx.shadowBlur = 22;
+            drawRoundedRect(ctx, boardX + 12, boardY + 12, boardWidth - 24, boardHeight - 24, 22, "rgba(30, 41, 59, 0.72)");
+            ctx.restore();
+
+            ctx.fillStyle = "#e0f2fe";
+            ctx.font = "600 20px 'Inter', 'Segoe UI', sans-serif";
+            ctx.fillText("Resistance Challenge Canvas", boardX + 36, boardY + 52);
+
+            ctx.fillStyle = "rgba(226, 232, 240, 0.75)";
+            ctx.font = "400 14px 'Inter', 'Segoe UI', sans-serif";
+            drawWrappedText(ctx, "Gamifizierter Flow vom Spin zur fertigen Challenge.", boardX + 36, boardY + 78, boardWidth - 72, 20);
+
+            const columnGap = 32;
+            const columnWidth = (boardWidth - columnGap - 72) / 2;
+            const leftX = boardX + 36;
+            const rightX = leftX + columnWidth + columnGap;
+            const topY = boardY + 116;
+            const cardHeight = boardHeight - 180;
+
+            drawRoundedRect(ctx, leftX, topY, columnWidth, cardHeight, 18, "rgba(51, 65, 85, 0.65)");
+            drawRoundedRect(ctx, rightX, topY, columnWidth, cardHeight, 18, "rgba(51, 65, 85, 0.45)");
+
+            ctx.fillStyle = "rgba(148, 163, 184, 0.85)";
+            ctx.font = "600 13px 'Inter', 'Segoe UI', sans-serif";
+            ctx.fillText("Aktuelle Challenge", leftX + 18, topY + 26);
+
+            ctx.fillStyle = "#f8fafc";
+            ctx.font = "600 18px 'Inter', 'Segoe UI', sans-serif";
+            drawWrappedText(ctx, canvasSummary || "Noch keine Challenge", leftX + 18, topY + 56, columnWidth - 36, 24);
+
+            if (canvasEquipment.length) {
+                ctx.font = "500 13px 'Inter', 'Segoe UI', sans-serif";
+                let chipX = leftX + 18;
+                const chipY = topY + cardHeight - 38;
+                canvasEquipment.forEach((chip) => {
+                    const padding = 14;
+                    const chipWidth = ctx.measureText(chip).width + padding * 2;
+                    drawRoundedRect(ctx, chipX, chipY, chipWidth, 28, "rgba(59, 130, 246, 0.25)");
+                    ctx.fillStyle = "#bfdbfe";
+                    ctx.fillText(chip, chipX + padding, chipY + 20);
+                    chipX += chipWidth + 12;
+                });
+            }
+
+            ctx.fillStyle = "rgba(148, 163, 184, 0.85)";
+            ctx.font = "600 13px 'Inter', 'Segoe UI', sans-serif";
+            ctx.fillText("Flow", rightX + 18, topY + 26);
+
+            ctx.fillStyle = "#f1f5f9";
+            ctx.font = "600 32px 'Inter', 'Segoe UI', sans-serif";
+            ctx.fillText(canvasTimerText, rightX + 18, topY + 74);
+
+            ctx.fillStyle = "rgba(226, 232, 240, 0.75)";
+            ctx.font = "500 14px 'Inter', 'Segoe UI', sans-serif";
+            drawWrappedText(ctx, `Phase: ${canvasPhase}`, rightX + 18, topY + 102, columnWidth - 36, 22);
+
+            const streakLabel = `Streak: ${canvasStreakSnapshot}`;
+            ctx.fillStyle = "rgba(248, 250, 252, 0.9)";
+            ctx.font = "600 16px 'Inter', 'Segoe UI', sans-serif";
+            ctx.fillText(streakLabel, rightX + 18, topY + cardHeight - 26);
+        }
+
+        function drawRoundedRect(ctx, x, y, width, height, radius, fillStyle) {
+            const r = Math.min(radius, width / 2, height / 2);
+            ctx.beginPath();
+            ctx.moveTo(x + r, y);
+            ctx.lineTo(x + width - r, y);
+            ctx.quadraticCurveTo(x + width, y, x + width, y + r);
+            ctx.lineTo(x + width, y + height - r);
+            ctx.quadraticCurveTo(x + width, y + height, x + width - r, y + height);
+            ctx.lineTo(x + r, y + height);
+            ctx.quadraticCurveTo(x, y + height, x, y + height - r);
+            ctx.lineTo(x, y + r);
+            ctx.quadraticCurveTo(x, y, x + r, y);
+            ctx.closePath();
+            ctx.fillStyle = fillStyle;
+            ctx.fill();
+        }
+
+        function drawWrappedText(ctx, text, x, y, maxWidth, lineHeight) {
+            const words = text.split(/\s+/);
+            let line = "";
+            let currentY = y;
+
+            words.forEach((word) => {
+                const testLine = line ? `${line} ${word}` : word;
+                if (ctx.measureText(testLine).width > maxWidth) {
+                    ctx.fillText(line, x, currentY);
+                    line = word;
+                    currentY += lineHeight;
+                } else {
+                    line = testLine;
+                }
+            });
+
+            if (line) {
+                ctx.fillText(line, x, currentY);
+            }
+        }
+
+        function formatSeconds(seconds) {
+            const mins = Math.floor(seconds / 60);
+            const secs = seconds % 60;
+            return `${mins}:${secs.toString().padStart(2, "0")}`;
+        }
+
+        function setSpinning(value) {
+            slotCards.forEach((card) => card.classList.toggle("spinning", value));
+            isSpinning = value;
+            spinButton.disabled = value;
+        }
+
+        function renderEquipmentChips(equipmentList) {
+            equipmentRow.innerHTML = "";
+            equipmentList.forEach((label) => {
+                const node = chipTemplate.content.firstElementChild.cloneNode(true);
+                node.textContent = label;
+                equipmentRow.appendChild(node);
+            });
+            setCanvasState({ equipment: equipmentList });
+        }
+
+        async function spin() {
+            if (isSpinning) return;
+            setSpinning(true);
+            resultText.textContent = "";
+            exerciseValue.classList.remove("crossed-out");
+            modifierValue.classList.remove("crossed-out");
+            toggleTimer.disabled = true;
+            resetTimer.disabled = true;
+            completeChallenge.disabled = true;
+            copyButton.disabled = true;
+            rerollButton.disabled = true;
+            setCanvasState({ phase: "Rolling", summary: "Slot läuft …", equipment: [] });
+
+            await new Promise((resolve) => setTimeout(resolve, 800));
+
+            const exercise = randomItem(exercises);
+            const baseDuration = randomItem(durations);
+            const modifierPool = [...globalModifiers, { label: exercise.evolution, description: "Übungsevolution" }];
+            const modifier = randomItem(modifierPool);
+
+            currentExercise = exercise;
+            currentDuration = baseDuration;
+            currentModifier = modifier;
+
+            exerciseValue.textContent = exercise.name;
+            timeValue.textContent = baseDuration;
+            modifierValue.textContent = modifier.label;
+
+            if (modifier.label === exercise.evolution) {
+                exerciseValue.classList.add("crossed-out");
+                modifierValue.classList.add("crossed-out");
+            }
+
+            renderEquipmentChips(exercise.equipment);
+            applyDuration(baseDuration, modifier.label === "Time ×2");
+
+            const isEvolution = modifier.label === exercise.evolution;
+            const summaryExercise = isEvolution ? modifier.label : exercise.name;
+            const parts = [`${timeValue.textContent} ${summaryExercise}`];
+
+            if (isEvolution) {
+                parts.push("— Evolution");
+            } else {
+                parts.push(`— Mod: ${modifier.label}`);
+                if (modifier.description) {
+                    parts.push(`(${modifier.description})`);
+                }
+            }
+
+            resultText.textContent = parts.join(" ");
+            setCanvasState({
+                summary: resultText.textContent,
+                phase: isEvolution ? "Evolution" : "Modus",
+            });
+
+            rerollButton.disabled = false;
+            copyButton.disabled = false;
+            toggleTimer.disabled = false;
+            resetTimer.disabled = false;
+            completeChallenge.disabled = false;
+
+            setSpinning(false);
+        }
+
+        function applyDuration(durationText, doubled) {
+            let seconds = Number.parseInt(durationText, 10);
+            if (Number.isNaN(seconds)) {
+                seconds = 30;
+            }
+            if (doubled) {
+                seconds *= 2;
+                timeValue.textContent = `${seconds}s`;
+            }
+            timerSeconds = seconds;
+            timerDisplay.textContent = formatSeconds(timerSeconds);
+            timerDisplay.classList.remove("finished");
+            setCanvasState({ timer: timerDisplay.textContent });
+        }
+
+        function toggleTimerState() {
+            if (timerInterval) {
+                clearInterval(timerInterval);
+                timerInterval = null;
+                toggleTimer.textContent = "▶️ Start";
+                setCanvasState({ phase: "Pause" });
+                return;
+            }
+
+            toggleTimer.textContent = "⏸️ Pause";
+            setCanvasState({ phase: "Aktiv" });
+            timerInterval = setInterval(() => {
+                if (timerSeconds <= 0) {
+                    clearInterval(timerInterval);
+                    timerInterval = null;
+                    timerDisplay.classList.add("finished");
+                    toggleTimer.textContent = "▶️ Start";
+                    setCanvasState({ phase: "Fertig" });
+                    return;
+                }
+                timerSeconds -= 1;
+                timerDisplay.textContent = formatSeconds(timerSeconds);
+                setCanvasState({ timer: timerDisplay.textContent });
+            }, 1000);
+        }
+
+        function resetTimerState() {
+            clearInterval(timerInterval);
+            timerInterval = null;
+            timerDisplay.textContent = formatSeconds(timerSeconds = Number.parseInt(timeValue.textContent, 10) || 0);
+            timerDisplay.classList.remove("finished");
+            toggleTimer.textContent = "▶️ Start";
+            setCanvasState({ phase: "Reset", timer: timerDisplay.textContent });
+        }
+
+        function copyResult() {
+            if (!resultText.textContent) return;
+            navigator.clipboard?.writeText(resultText.textContent).catch(() => {
+                const textarea = document.createElement("textarea");
+                textarea.value = resultText.textContent;
+                document.body.appendChild(textarea);
+                textarea.select();
+                document.execCommand("copy");
+                textarea.remove();
+            });
+            copyButton.textContent = "✔️ Kopiert";
+            setTimeout(() => {
+                copyButton.textContent = "📋 Kopieren";
+            }, 1600);
+        }
+
+        function completeCurrentChallenge() {
+            streak += 1;
+            localStorage.setItem("rc-streak", String(streak));
+            streakValue.textContent = streak;
+            completeChallenge.textContent = "🔥 Streak +1";
+            completeChallenge.disabled = true;
+            setCanvasState({ streak, phase: "Streak" });
+            setTimeout(() => {
+                completeChallenge.textContent = "✅ Done";
+                completeChallenge.disabled = false;
+            }, 1800);
+        }
+
+        spinButton.addEventListener("click", spin);
+        rerollButton.addEventListener("click", spin);
+        copyButton.addEventListener("click", copyResult);
+        toggleTimer.addEventListener("click", toggleTimerState);
+        resetTimer.addEventListener("click", resetTimerState);
+        completeChallenge.addEventListener("click", completeCurrentChallenge);
+
+        document.addEventListener("keydown", (event) => {
+            if (event.code === "Space" && !isSpinning) {
+                event.preventDefault();
+                spin();
+            }
+        });
+
+        setCanvasState({ streak, timer: formatSeconds(timerSeconds), phase: canvasPhase, equipment: [] });
+
+        if (conceptCtx) {
+            const handleResize = () => requestAnimationFrame(refreshCanvas);
+            window.addEventListener("resize", handleResize);
+            requestAnimationFrame(refreshCanvas);
+        }
+    </script>
+</body>
+</html>
